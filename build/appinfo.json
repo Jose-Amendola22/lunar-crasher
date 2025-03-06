@@ -1,0 +1,24 @@
+{
+    "appKeys": {
+        "dummy": 0
+    }, 
+    "targetPlatforms": [
+        "aplite", 
+        "basalt"
+    ], 
+    "uuid": "ae8b2bc4-7f29-41c4-b8e5-d0b3d7a999ad", 
+    "messageKeys": {
+        "dummy": 0
+    }, 
+    "companyName": "JossMa", 
+    "watchapp": {
+        "watchface": false
+    }, 
+    "capabilities": [], 
+    "sdkVersion": "3", 
+    "versionLabel": "1.0", 
+    "longName": "Lunar Crasher", 
+    "versionCode": 1, 
+    "shortName": "Lunar Crasher", 
+    "resources": {}
+}
