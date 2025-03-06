@@ -10,21 +10,24 @@
 #define PAD_WIDTH 20
 #define MAP_COUNT 5
 #define CURRENT_MAP 0
+#define TRIG_MAX_ANGLE 65536
+#define TRIG_MAX_RATIO 65536
+#define SCALE_FACTOR 100
 
 #define DEG_TO_RAD(deg) ((deg) * M_PI / 180.0f)
 
 typedef struct {
-  float x;
-  float y;
-  float dx;
-  float dy;
-  float rotation;
-  bool thrusting;
-  bool game_over;
-  bool landed;
-  int fuel;
-  int score;
-  int current_map;
+    int32_t x;          // x position (scaled by SCALE_FACTOR)
+    int32_t y;          // y position (scaled by SCALE_FACTOR)
+    int32_t dx;         // x velocity (scaled by SCALE_FACTOR)
+    int32_t dy;         // y velocity (scaled by SCALE_FACTOR)
+    int32_t rotation;   // rotation (scaled by SCALE_FACTOR)
+    int thrusting;      // boolean or integer flag
+    int game_over;      // boolean or integer flag
+    int landed;         // boolean or integer flag
+    int fuel;           // integer value
+    int score;          // integer value
+    int current_map;    // integer value
 } GameState;
 
 static Window *s_main_window;
@@ -102,27 +105,41 @@ static void init_maps() {
   s_maps[4].pad_end_index = 5;
 }
 
-static void init_game() {
-  GRect bounds = layer_get_bounds(s_game_layer);
+void init_game() {
+  GameState s_game_state = {
+    .x = 72,       // 72.0 becomes 7200
+    .y = 84,       // 84.0 becomes 8400
+    .dx = 1 * SCALE_FACTOR,       // 1.0 becomes 100
+    .dy = -2 * SCALE_FACTOR,      // -2.0 becomes -200
+    .rotation = 45 * SCALE_FACTOR,// 45.0 becomes 4500
+    .thrusting = 1,
+    .game_over = 0,
+    .landed = 0,
+    .fuel = 100,
+    .score = 0,
+    .current_map = 1
+  };
+
+  APP_LOG(APP_LOG_LEVEL_INFO, "Game state x=%d", s_game_state.x);
+  APP_LOG(APP_LOG_LEVEL_INFO, "Game state y=%d", s_game_state.y);
+  APP_LOG(APP_LOG_LEVEL_INFO, "Game state dx=%d", s_game_state.dx);
+  APP_LOG(APP_LOG_LEVEL_INFO, "Game state dy=%d", s_game_state.dy);
+  APP_LOG(APP_LOG_LEVEL_INFO, "Game state rotation=%d", s_game_state.rotation);
+  APP_LOG(APP_LOG_LEVEL_INFO, "Game state thrusting=%d", s_game_state.thrusting);
+  APP_LOG(APP_LOG_LEVEL_INFO, "Game state game_over=%d", s_game_state.game_over);
+  APP_LOG(APP_LOG_LEVEL_INFO, "Game state landed=%d", s_game_state.landed);
+  APP_LOG(APP_LOG_LEVEL_INFO, "Game state fuel=%d", s_game_state.fuel);
+  APP_LOG(APP_LOG_LEVEL_INFO, "Game state score=%d", s_game_state.score);
+  APP_LOG(APP_LOG_LEVEL_INFO, "Game state current_map=%d", s_game_state.current_map);
   
-  s_game_state.x = bounds.size.w / 2;
-  s_game_state.y = bounds.size.h / 4;
-  s_game_state.dx = 0.5f;
-  s_game_state.dy = 0.0f;
-  s_game_state.rotation = 0.0f;
-  s_game_state.thrusting = false;
-  s_game_state.game_over = false;
-  s_game_state.landed = false;
-  s_game_state.fuel = 100;
-  s_game_state.score = 0;
-  
-  s_game_state.current_map = rand() % MAP_COUNT;
 }
 
 static void draw_lander(GContext *ctx) {
   graphics_context_set_stroke_color(ctx, GColorWhite);
   
   GPoint lander_center = GPoint((int)s_game_state.x, (int)s_game_state.y);
+  
+  int32_t angle = (int32_t)(s_game_state.rotation * TRIG_MAX_ANGLE / 360);
   
   const GPoint lander_points[] = {
     GPoint(0, -LANDER_SIZE),
@@ -132,7 +149,6 @@ static void draw_lander(GContext *ctx) {
   
   GPoint rotated_points[3];
   for (int i = 0; i < 3; i++) {
-    int32_t angle = (int32_t)(s_game_state.rotation * TRIG_MAX_ANGLE / 360);
     int x = lander_points[i].x;
     int y = lander_points[i].y;
     rotated_points[i].x = lander_center.x + (x * cos_lookup(angle) / TRIG_MAX_RATIO - 
@@ -144,42 +160,18 @@ static void draw_lander(GContext *ctx) {
   graphics_draw_line(ctx, rotated_points[0], rotated_points[1]);
   graphics_draw_line(ctx, rotated_points[1], rotated_points[2]);
   graphics_draw_line(ctx, rotated_points[2], rotated_points[0]);
-  
-  if (s_game_state.thrusting && s_game_state.fuel > 0) {
-    int32_t angle = (int32_t)(s_game_state.rotation * TRIG_MAX_ANGLE / 360);
-    
-    GPoint thrust_base = GPoint(0, LANDER_SIZE);
-    GPoint rotated_base;
-    rotated_base.x = lander_center.x + (thrust_base.x * cos_lookup(angle) / TRIG_MAX_RATIO - 
-                                       thrust_base.y * sin_lookup(angle) / TRIG_MAX_RATIO);
-    rotated_base.y = lander_center.y + (thrust_base.x * sin_lookup(angle) / TRIG_MAX_RATIO + 
-                                       thrust_base.y * cos_lookup(angle) / TRIG_MAX_RATIO);
-    
-    GPoint flame_left = GPoint(-5, LANDER_SIZE + 6);
-    GPoint flame_right = GPoint(5, LANDER_SIZE + 6);
-    
-    GPoint rotated_flame_left, rotated_flame_right;
-    rotated_flame_left.x = lander_center.x + (flame_left.x * cos_lookup(angle) / TRIG_MAX_RATIO - 
-                                            flame_left.y * sin_lookup(angle) / TRIG_MAX_RATIO);
-    rotated_flame_left.y = lander_center.y + (flame_left.x * sin_lookup(angle) / TRIG_MAX_RATIO + 
-                                            flame_left.y * cos_lookup(angle) / TRIG_MAX_RATIO);
-    
-    rotated_flame_right.x = lander_center.x + (flame_right.x * cos_lookup(angle) / TRIG_MAX_RATIO - 
-                                             flame_right.y * sin_lookup(angle) / TRIG_MAX_RATIO);
-    rotated_flame_right.y = lander_center.y + (flame_right.x * sin_lookup(angle) / TRIG_MAX_RATIO + 
-                                             flame_right.y * cos_lookup(angle) / TRIG_MAX_RATIO);
-    #if defined(PBL_COLOR)
-        graphics_context_set_stroke_color(ctx, GColorRed);
-        graphics_context_set_fill_color(ctx, GColorRed);
-      #else
-        graphics_context_set_stroke_width(ctx, 2);
-        graphics_context_set_fill_color(ctx, GColorWhite);
-      #endif
 
-    graphics_draw_line(ctx, rotated_base, rotated_flame_left);
-    graphics_draw_line(ctx, rotated_base, rotated_flame_right);
+  if (s_game_state.thrusting && s_game_state.fuel > 0) {
+    GPoint thrust_base = rotated_points[1]; 
+    GPoint flame_left = {thrust_base.x - 3, thrust_base.y + 5};
+    GPoint flame_right = {thrust_base.x + 3, thrust_base.y + 5};
+
+    graphics_context_set_stroke_color(ctx, GColorRed);
+    graphics_draw_line(ctx, thrust_base, flame_left);
+    graphics_draw_line(ctx, thrust_base, flame_right);
   }
 }
+
 
 static void draw_ground(GContext *ctx, GRect bounds) {
   GameMap current_map = s_maps[s_game_state.current_map];
@@ -216,15 +208,19 @@ static void draw_ground(GContext *ctx, GRect bounds) {
     }
   }
 }
+
 static bool check_collision() {
   GameMap current_map = s_maps[s_game_state.current_map];
-  
+  APP_LOG(APP_LOG_LEVEL_INFO, "check_collision on site");
+   
   for (int i = 0; i < current_map.terrain_size - 1; i++) {
     if (s_game_state.x >= current_map.terrain[i].x && s_game_state.x <= current_map.terrain[i + 1].x) {
-      float slope = (float)(current_map.terrain[i + 1].y - current_map.terrain[i].y) / 
-                    (current_map.terrain[i + 1].x - current_map.terrain[i].x);
-      float expected_y = current_map.terrain[i].y + slope * (s_game_state.x - current_map.terrain[i].x);
-      
+      int32_t dx = current_map.terrain[i + 1].x - current_map.terrain[i].x;
+      int32_t dy = current_map.terrain[i + 1].y - current_map.terrain[i].y;
+
+      int32_t slope = (dy << 16) / dx;  // This uses fixed point arithmetic to maintain precision
+      int32_t expected_y = current_map.terrain[i].y + ((s_game_state.x - current_map.terrain[i].x) * slope) >> 16;
+
       if (s_game_state.y + LANDER_SIZE >= expected_y) {
         s_game_state.landed = (i >= current_map.pad_start_index && i < current_map.pad_end_index);
         return true;
@@ -233,6 +229,8 @@ static bool check_collision() {
   }
   return false;
 }
+
+
 
 static void draw_ui(GContext *ctx, GRect bounds) {
   char s_buffer[32];
@@ -274,54 +272,60 @@ static void draw_ui(GContext *ctx, GRect bounds) {
 }
 
 static void update_game_state() {
-  if (s_game_state.game_over) {
-    return;
-  }
-  
-  GRect bounds = layer_get_bounds(s_game_layer);
-  
-  if (s_game_state.thrusting && s_game_state.fuel > 0) {
-    int32_t angle = (int32_t)(s_game_state.rotation * TRIG_MAX_ANGLE / 360);
+  APP_LOG(APP_LOG_LEVEL_INFO, "update_game_state");
+  APP_LOG(APP_LOG_LEVEL_INFO, "game_over=%d", s_game_state.game_over);
+  // if (s_game_state.game_over) {
+  //   return;
+  // }
 
-    s_game_state.dx += sin_lookup(angle) * THRUST / TRIG_MAX_RATIO;
-    s_game_state.dy -= cos_lookup(angle) * THRUST / TRIG_MAX_RATIO;
-    
+  GRect bounds = layer_get_bounds(s_game_layer);
+
+  if (s_game_state.thrusting && s_game_state.fuel > 0) {
+    APP_LOG(APP_LOG_LEVEL_INFO, "thrusting");
+    int32_t angle = (s_game_state.rotation * TRIG_MAX_ANGLE) / (360 * SCALE_FACTOR);
+
+    s_game_state.dx += (sin_lookup(angle) * THRUST) / TRIG_MAX_RATIO;
+    s_game_state.dy -= (cos_lookup(angle) * THRUST) / TRIG_MAX_RATIO;
+
     s_game_state.fuel--;
   }
-  
+
+  APP_LOG(APP_LOG_LEVEL_INFO, "dy += GRAVITY");
   s_game_state.dy += GRAVITY;
-  
+
   s_game_state.x += s_game_state.dx;
   s_game_state.y += s_game_state.dy;
 
   if (s_game_state.x < 0) {
-    s_game_state.x = bounds.size.w;
-  } else if (s_game_state.x > bounds.size.w) {
+    s_game_state.x = bounds.size.w * SCALE_FACTOR;
+  } else if (s_game_state.x > bounds.size.w * SCALE_FACTOR) {
     s_game_state.x = 0;
   }
-  
+
   if (check_collision()) {
+    APP_LOG(APP_LOG_LEVEL_INFO, "check_collision 2");
     s_game_state.game_over = true;
-    
+
     GameMap current_map = s_maps[s_game_state.current_map];
-    bool soft_landing = (fabsf(s_game_state.dy) < 1.5f && fabsf(s_game_state.dx) < 0.5f);
-    bool upright = (fabsf(s_game_state.rotation) < 15.0f || fabsf(s_game_state.rotation) > 345.0f);
-    
+    bool soft_landing = (abs(s_game_state.dy) < 150 && abs(s_game_state.dx) < 50);
+    bool upright = (abs(s_game_state.rotation) < 1500 || abs(s_game_state.rotation) > 34500);
+
     if (s_game_state.landed && soft_landing && upright) {
       int difficulty_bonus = (current_map.pad_end_index - current_map.pad_start_index) * 5;
       s_game_state.score = s_game_state.fuel * 10 + difficulty_bonus;
       vibes_short_pulse();
     } else {
       s_game_state.landed = false;
-      vibes_double_pulse();
+      //vibes_double_pulse();
     }
-    
+
     s_game_state.dx = 0;
     s_game_state.dy = 0;
   }
-  
+
   layer_mark_dirty(s_game_layer);
 }
+
 
 static void game_timer_callback(void *data) {
   update_game_state();
@@ -352,6 +356,7 @@ static void select_release_handler(ClickRecognizerRef recognizer, void *context)
 
 static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
   if (s_game_state.game_over) {
+    APP_LOG(APP_LOG_LEVEL_INFO, "select_click_handler");
     init_game();
   } else { 
     s_game_state.thrusting = true;
@@ -372,21 +377,29 @@ static void click_config_provider(void *context) {
 }
 
 static void main_window_load(Window *window) {
-  Layer *window_layer = window_get_root_layer(window);
-  GRect bounds = layer_get_bounds(window_layer);
-  
-  s_game_layer = layer_create(bounds);
-  layer_set_update_proc(s_game_layer, game_layer_update_proc);
-  layer_add_child(window_layer, s_game_layer);
-  
-  init_maps();
-  
-  srand(time(NULL));
-  
-  init_game();
-  
-  s_game_timer = app_timer_register(GAME_TICK_MS, game_timer_callback, NULL);
+    Layer *window_layer = window_get_root_layer(window);
+    GRect bounds = layer_get_bounds(window_layer);
+
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Initializing game...");
+
+    // Create and add game layer
+    s_game_layer = layer_create(bounds);
+    layer_set_update_proc(s_game_layer, game_layer_update_proc);
+    layer_add_child(window_layer, s_game_layer);
+
+    // Initialize other stuff first
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Initializing maps...");
+    init_maps();
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Initializing random number generator...");
+    srand(time(NULL));
+
+    // Now call init_game AFTER the layer is properly added
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Initializing game state...");
+    init_game();
+
+    s_game_timer = app_timer_register(GAME_TICK_MS, game_timer_callback, NULL);
 }
+
 
 static void main_window_unload(Window *window) {
   if (s_game_timer) {
